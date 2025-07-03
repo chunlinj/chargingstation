@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+In every conversation, if you don't clearly ask me to help you implement it or to perform the task of modifying the code, don't modify the code. If you want to modify the code, you need to ask first. Do you need me to modify the code to implement it?
+
+If you want to use the command line, use PowerShell to execute it each time.
