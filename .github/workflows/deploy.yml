@@ -36,80 +36,81 @@ jobs:
           ls -la target/surefire-reports/
         fi
 
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: test
-    name: 构建并推送Docker镜像
-    
-    steps:
-    - name: Checkout代码
-      uses: actions/checkout@v4
-      
-    - name: 设置Docker Buildx
-      uses: docker/setup-buildx-action@v3
-      
-    - name: 登录Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-        
-    - name: 构建并推送到Docker Hub
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: |
-          ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:latest
-          ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+  # 临时禁用Docker构建来测试问题
+  # build-and-push:
+  #   runs-on: ubuntu-latest
+  #   needs: test
+  #   name: 构建并推送Docker镜像
+  #   
+  #   steps:
+  #   - name: Checkout代码
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: 设置Docker Buildx
+  #     uses: docker/setup-buildx-action@v3
+  #     
+  #   - name: 登录Docker Hub
+  #     uses: docker/login-action@v3
+  #     with:
+  #       username: ${{ secrets.DOCKER_USERNAME }}
+  #       password: ${{ secrets.DOCKER_PASSWORD }}
+  #       
+  #   - name: 构建并推送到Docker Hub
+  #     uses: docker/build-push-action@v5
+  #     with:
+  #       context: .
+  #       push: true
+  #       tags: |
+  #         ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:latest
+  #         ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
 
-  deploy-azure:
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    name: 部署到Azure
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Checkout代码
-      uses: actions/checkout@v4
-      
-    - name: 登录Azure
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-        
-    - name: 部署到Azure Container Instances
-      uses: azure/aci-deploy@v1
-      with:
-        resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
-        dns-name-label: ${{ env.APP_NAME }}-${{ github.run_number }}
-        image: ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
-        name: ${{ env.APP_NAME }}
-        location: 'East Asia'
-        ports: '8081'
-        environment-variables: |
-          SPRING_PROFILES_ACTIVE=prod
-          SPRING_CLOUD_CONFIG_ENABLED=false
-          DB_URL=${{ secrets.AZURE_DB_URL }}
-          DB_USERNAME=${{ secrets.AZURE_DB_USERNAME }}
-          DB_PASSWORD=${{ secrets.AZURE_DB_PASSWORD }}
-        cpu: 1
-        memory: 2
+  # deploy-azure:
+  #   runs-on: ubuntu-latest
+  #   needs: build-and-push
+  #   name: 部署到Azure
+  #   if: github.ref == 'refs/heads/main'
+  #   
+  #   steps:
+  #   - name: Checkout代码
+  #     uses: actions/checkout@v4
+  #     
+  #   - name: 登录Azure
+  #     uses: azure/login@v1
+  #     with:
+  #       creds: ${{ secrets.AZURE_CREDENTIALS }}
+  #       
+  #   - name: 部署到Azure Container Instances
+  #     uses: azure/aci-deploy@v1
+  #     with:
+  #       resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  #       dns-name-label: ${{ env.APP_NAME }}-${{ github.run_number }}
+  #       image: ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+  #       name: ${{ env.APP_NAME }}
+  #       location: 'East Asia'
+  #       ports: '8081'
+  #       environment-variables: |
+  #         SPRING_PROFILES_ACTIVE=prod
+  #         SPRING_CLOUD_CONFIG_ENABLED=false
+  #         DB_URL=${{ secrets.AZURE_DB_URL }}
+  #         DB_USERNAME=${{ secrets.AZURE_DB_USERNAME }}
+  #         DB_PASSWORD=${{ secrets.AZURE_DB_PASSWORD }}
+  #       cpu: 1
+  #       memory: 2
 
-  deploy-notification:
+  test-completion:
     runs-on: ubuntu-latest
-    needs: [deploy-azure]
-    name: 部署完成通知
+    needs: [test]
+    name: 测试完成通知
     if: always()
     
     steps:
-    - name: 输出部署结果
+    - name: 输出测试结果
       run: |
-        echo "部署流程完成"
-        echo "Azure部署状态: ${{ needs.deploy-azure.result }}"
-        if [ "${{ needs.deploy-azure.result }}" == "success" ]; then
-          echo "✅ Azure部署成功"
-          echo "访问地址: https://${{ env.APP_NAME }}-${{ github.run_number }}.eastasia.azurecontainer.io:8081"
+        echo "🧪 测试阶段完成"
+        echo "测试状态: ${{ needs.test.result }}"
+        if [ "${{ needs.test.result }}" == "success" ]; then
+          echo "✅ 所有测试通过"
         else
-          echo "❌ Azure部署失败"
-        fi 
+          echo "❌ 测试失败"
+        fi
+        echo "下一步：修复Docker配置后重新启用构建和部署" 
