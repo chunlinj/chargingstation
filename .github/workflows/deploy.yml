@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Deploy to Azure
+name: CI/CD Pipeline - Deploy to Azure and AWS
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 env:
   APP_NAME: charging-station-service
-  AZURE_REGISTRY: chargingstationacr.azurecr.io  # 您的ACR地址
+  DOCKER_IMAGE: charging-station-service
 
 jobs:
   test:
@@ -25,44 +25,52 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
         
+    - name: 缓存Maven依赖
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+        
     - name: 运行测试
       run: mvn clean test
       
-    - name: 显示测试结果
-      run: |
-        echo "✅ 测试完成"
-        if [ -d "target/surefire-reports" ]; then
-          echo "📊 测试报告已生成"
-        fi
+    - name: 生成测试报告
+      uses: dorny/test-reporter@v1
+      if: success() || failure()
+      with:
+        name: Maven Tests
+        path: target/surefire-reports/*.xml
+        reporter: java-junit
 
   build-and-push:
     runs-on: ubuntu-latest
     needs: test
-    name: 构建并推送到Azure Container Registry
-    if: github.ref == 'refs/heads/main'
+    name: 构建并推送Docker镜像
     
     steps:
     - name: Checkout代码
       uses: actions/checkout@v4
       
-    - name: 登录Azure
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - name: 设置Docker Buildx
+      uses: docker/setup-buildx-action@v3
       
-    - name: 登录Azure Container Registry
-      run: |
-        az acr login --name chargingstationacr
+    - name: 登录Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
         
-    - name: 构建并推送到ACR
-      run: |
-        # 构建镜像
-        docker build -t ${{ env.AZURE_REGISTRY }}/${{ env.APP_NAME }}:latest .
-        docker build -t ${{ env.AZURE_REGISTRY }}/${{ env.APP_NAME }}:${{ github.sha }} .
-        
-        # 推送镜像
-        docker push ${{ env.AZURE_REGISTRY }}/${{ env.APP_NAME }}:latest
-        docker push ${{ env.AZURE_REGISTRY }}/${{ env.APP_NAME }}:${{ github.sha }}
+    - name: 构建并推送到Docker Hub
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:latest
+          ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
   deploy-azure:
     runs-on: ubuntu-latest
@@ -84,7 +92,7 @@ jobs:
       with:
         resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
         dns-name-label: ${{ env.APP_NAME }}-${{ github.run_number }}
-        image: ${{ env.AZURE_REGISTRY }}/${{ env.APP_NAME }}:${{ github.sha }}
+        image: ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
         name: ${{ env.APP_NAME }}
         location: 'East Asia'
         ports: '8081'
@@ -97,8 +105,72 @@ jobs:
         cpu: 1
         memory: 2
         
-    - name: 显示部署结果
+    - name: 部署到Azure App Service (可选)
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ secrets.AZURE_APP_NAME }}
+        images: ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+
+  deploy-aws:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    name: 部署到AWS
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout代码
+      uses: actions/checkout@v4
+      
+    - name: 配置AWS凭据
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+        
+    - name: 登录AWS ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+      
+    - name: 推送镜像到ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ env.APP_NAME }}
+        IMAGE_TAG: ${{ github.sha }}
       run: |
-        echo "🚀 部署完成!"
-        echo "📱 访问地址: https://${{ env.APP_NAME }}-${{ github.run_number }}.eastasia.azurecontainer.io:8081"
-        echo "🏥 健康检查: https://${{ env.APP_NAME }}-${{ github.run_number }}.eastasia.azurecontainer.io:8081/charging-station/actuator/health" 
+        # 重新标记镜像
+        docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+        docker tag ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker tag ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+        # 推送到ECR
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        
+    - name: 更新ECS服务
+      run: |
+        aws ecs update-service \
+          --cluster ${{ secrets.AWS_ECS_CLUSTER }} \
+          --service ${{ secrets.AWS_ECS_SERVICE }} \
+          --force-new-deployment
+          
+    - name: 部署到AWS App Runner (可选)
+      run: |
+        aws apprunner start-deployment \
+          --service-arn ${{ secrets.AWS_APPRUNNER_SERVICE_ARN }}
+
+  deploy-notification:
+    runs-on: ubuntu-latest
+    needs: [deploy-azure, deploy-aws]
+    name: 部署通知
+    if: always()
+    
+    steps:
+    - name: 发送部署通知
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ job.status }}
+        channel: '#deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        fields: repo,message,commit,author,action,eventName,ref,workflow 

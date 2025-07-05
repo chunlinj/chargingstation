@@ -111,7 +111,7 @@ class LocationServiceTest {
     void shouldGetLocationByIdSuccessfully() {
         // Given
         UUID locationId = UUID.randomUUID();
-        when(locationRepository.findById(locationId)).thenReturn(Optional.of(testLocation));
+        when(locationRepository.findWithEvsesByIdEquals(locationId)).thenReturn(Optional.of(testLocation));
         when(locationMapper.toResponse(testLocation)).thenReturn(testLocationResponse);
         
         // When
@@ -120,7 +120,7 @@ class LocationServiceTest {
         // Then
         assertNotNull(result);
         assertEquals(testLocationResponse.getName(), result.getName());
-        verify(locationRepository).findById(locationId);
+        verify(locationRepository).findWithEvsesByIdEquals(locationId);
         verify(locationMapper).toResponse(testLocation);
     }
     
@@ -129,12 +129,12 @@ class LocationServiceTest {
     void shouldThrowExceptionWhenLocationNotFound() {
         // Given
         UUID locationId = UUID.randomUUID();
-        when(locationRepository.findById(locationId)).thenReturn(Optional.empty());
+        when(locationRepository.findWithEvsesByIdEquals(locationId)).thenReturn(Optional.empty());
         
         // When & Then
         assertThrows(ResourceNotFoundException.class, 
             () -> locationService.getLocationById(locationId));
-        verify(locationRepository).findById(locationId);
+        verify(locationRepository).findWithEvsesByIdEquals(locationId);
         verifyNoInteractions(locationMapper);
     }
     
