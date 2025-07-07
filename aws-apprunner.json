@@ -7,6 +7,8 @@
         "Port": "8081",
         "RuntimeEnvironmentVariables": {
           "SPRING_PROFILES_ACTIVE": "prod",
+          "SPRING_CLOUD_CONFIG_ENABLED": "false",
+          "SPRING_CLOUD_CONFIG_IMPORT_CHECK_ENABLED": "false",
           "DB_URL": "DB_URL_PLACEHOLDER",
           "DB_USERNAME": "DB_USERNAME_PLACEHOLDER", 
           "DB_PASSWORD": "DB_PASSWORD_PLACEHOLDER"
