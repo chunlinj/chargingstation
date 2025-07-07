@@ -128,7 +128,7 @@ jobs:
         cpu: 1
         memory: 2
         
-    - name: 部署到Azure App Service (可选)
+    - name: 部署到Azure App Service
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ secrets.AZURE_APP_NAME }}
