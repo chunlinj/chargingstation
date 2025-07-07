@@ -204,19 +204,36 @@ jobs:
       run: |
         echo "🚀 智能部署到 AWS App Runner..."
         
+        # 显示当前使用的AWS区域
+        echo "🌍 当前AWS区域: $AWS_DEFAULT_REGION"
+        
         # 先列出所有服务进行调试
         echo "🔍 调试：列出所有App Runner服务..."
         aws apprunner list-services --output table
         
-        # 检查特定服务名称的服务
+        # 检查特定服务名称的服务 - 改进查询方式
         echo "🔍 查找charging-station-service服务..."
-        SERVICE_ARN=$(aws apprunner list-services --query "ServiceList[?ServiceName=='charging-station-service'].ServiceArn" --output text)
+        
+        # 方法1：直接查询JSON格式
+        echo "🔍 方法1：JSON格式查询..."
+        aws apprunner list-services --output json | jq '.ServiceList[] | select(.ServiceName=="charging-station-service") | .ServiceArn'
+        
+        # 方法2：改进的JMESPath查询
+        echo "🔍 方法2：改进的查询..."
+        SERVICE_ARN=$(aws apprunner list-services --query 'ServiceList[?ServiceName==`charging-station-service`].ServiceArn' --output text)
         
         echo "🔍 调试信息："
         echo "SERVICE_ARN 原始值: '$SERVICE_ARN'"
         echo "SERVICE_ARN 长度: ${#SERVICE_ARN}"
         
-        # 简化逻辑：找到服务就更新，找不到就创建
+        # 如果方法2失败，尝试方法3
+        if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ] || [ "$SERVICE_ARN" = "null" ]; then
+          echo "🔍 方法3：使用grep方式查找..."
+          SERVICE_ARN=$(aws apprunner list-services --output text | grep charging-station-service | awk '{print $2}')
+          echo "🔍 方法3结果: '$SERVICE_ARN'"
+        fi
+        
+        # 最终检查逻辑
         if [ -n "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ] && [ "$SERVICE_ARN" != "null" ] && [ "$SERVICE_ARN" != "" ]; then
           echo "🔄 找到现有服务: $SERVICE_ARN"
           
