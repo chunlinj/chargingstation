@@ -60,6 +60,24 @@ jobs:
     - name: 设置Docker Buildx
       uses: docker/setup-buildx-action@v3
       
+    - name: 调试Docker凭据
+      run: |
+        echo "Username length: ${#USERNAME}"
+        echo "Password length: ${#PASSWORD}"
+        echo "Username starts with: ${USERNAME:0:3}..."
+        if [ -z "$USERNAME" ]; then
+          echo "❌ DOCKER_USERNAME is empty!"
+          exit 1
+        fi
+        if [ -z "$PASSWORD" ]; then
+          echo "❌ DOCKER_PASSWORD is empty!"
+          exit 1
+        fi
+        echo "✅ Both username and password are set"
+      env:
+        USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        
     - name: 登录Docker Hub
       uses: docker/login-action@v3
       with:
