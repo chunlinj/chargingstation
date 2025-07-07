@@ -110,23 +110,37 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
         
-    - name: 部署到Azure Container Instances
-      uses: azure/aci-deploy@v1
-      with:
-        resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
-        dns-name-label: ${{ env.APP_NAME }}-${{ github.run_number }}
-        image: ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
-        name: ${{ env.APP_NAME }}
-        location: 'East Asia'
-        ports: '8081'
-        environment-variables: |
-          SPRING_PROFILES_ACTIVE=prod
-          SPRING_CLOUD_CONFIG_ENABLED=false
-          DB_URL=${{ secrets.AZURE_DB_URL }}
-          DB_USERNAME=${{ secrets.AZURE_DB_USERNAME }}
-          DB_PASSWORD=${{ secrets.AZURE_DB_PASSWORD }}
-        cpu: 1
-        memory: 2
+    # 使用 App Service，注释掉 Container Instances
+    # - name: 部署到Azure Container Instances
+    #   uses: azure/aci-deploy@v1
+    #   with:
+    #     resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+    #     dns-name-label: ${{ env.APP_NAME }}-${{ github.run_number }}
+    #     image: ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+    #     name: ${{ env.APP_NAME }}
+    #     location: 'East Asia'
+    #     ports: '8081'
+    #     environment-variables: |
+    #       SPRING_PROFILES_ACTIVE=prod
+    #       SPRING_CLOUD_CONFIG_ENABLED=false
+    #       DB_URL=${{ secrets.AZURE_DB_URL }}
+    #       DB_USERNAME=${{ secrets.AZURE_DB_USERNAME }}
+    #       DB_PASSWORD=${{ secrets.AZURE_DB_PASSWORD }}
+    #     cpu: 1
+    #     memory: 2
+        
+    - name: 配置Azure App Service应用设置
+      run: |
+        az webapp config appsettings set \
+          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+          --name ${{ secrets.AZURE_APP_NAME }} \
+          --settings \
+            SPRING_PROFILES_ACTIVE=prod \
+            SPRING_CLOUD_CONFIG_ENABLED=false \
+            DB_URL="${{ secrets.AZURE_DB_URL }}" \
+            DB_USERNAME="${{ secrets.AZURE_DB_USERNAME }}" \
+            DB_PASSWORD="${{ secrets.AZURE_DB_PASSWORD }}" \
+            WEBSITES_PORT=8081
         
     - name: 部署到Azure App Service
       uses: azure/webapps-deploy@v2
