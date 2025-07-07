@@ -191,49 +191,59 @@ jobs:
       run: |
         echo "🚀 部署到 AWS App Runner..."
         
-        # 检查App Runner服务是否存在
-        SERVICE_EXISTS=$(aws apprunner list-services --query "ServiceList[?ServiceName=='${{ env.APP_NAME }}']" --output text)
+        # 定义服务名称
+        SERVICE_NAME="${{ env.APP_NAME }}"
         
-        if [ -z "$SERVICE_EXISTS" ]; then
-          echo "📦 创建新的 App Runner 服务..."
-          aws apprunner create-service \
-            --service-name ${{ env.APP_NAME }} \
-            --source-configuration '{
-              "ImageRepository": {
-                "ImageIdentifier": "${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}",
-                "ImageConfiguration": {
-                  "Port": "8081",
-                  "RuntimeEnvironmentVariables": {
-                    "SPRING_PROFILES_ACTIVE": "prod",
-                    "SPRING_CLOUD_CONFIG_ENABLED": "false",
-                    "DB_URL": "${{ secrets.AZURE_DB_URL }}",
-                    "DB_USERNAME": "${{ secrets.AZURE_DB_USERNAME }}",
-                    "DB_PASSWORD": "${{ secrets.AZURE_DB_PASSWORD }}"
-                  }
-                },
-                "ImageRepositoryType": "ECR_PUBLIC"
-              },
-              "AutoDeploymentsEnabled": false
-            }' \
-            --instance-configuration '{
-              "Cpu": "0.25 vCPU",
-              "Memory": "0.5 GB"
-            }' > app-runner-create.json
-            
-          # 获取服务ARN
-          SERVICE_ARN=$(jq -r '.Service.ServiceArn' app-runner-create.json)
+        # 检查服务是否存在
+        echo "🔍 检查 App Runner 服务是否存在..."
+        if aws apprunner list-services --query "ServiceList[?ServiceName=='$SERVICE_NAME']" --output text | grep -q "$SERVICE_NAME"; then
+          echo "🔄 服务已存在，获取服务ARN..."
+          SERVICE_ARN=$(aws apprunner list-services --query "ServiceList[?ServiceName=='$SERVICE_NAME'].ServiceArn" --output text)
+          echo "Service ARN: $SERVICE_ARN"
+          
+          echo "🔄 触发部署更新..."
+          aws apprunner start-deployment --service-arn "$SERVICE_ARN"
           echo "SERVICE_ARN=$SERVICE_ARN" >> $GITHUB_ENV
           
         else
-          echo "🔄 更新现有的 App Runner 服务..."
-          SERVICE_ARN=$(aws apprunner list-services --query "ServiceList[?ServiceName=='${{ env.APP_NAME }}'].ServiceArn" --output text)
-          echo "SERVICE_ARN=$SERVICE_ARN" >> $GITHUB_ENV
+          echo "📦 服务不存在，创建新的 App Runner 服务..."
           
-          aws apprunner start-deployment --service-arn $SERVICE_ARN
+          # 创建服务配置文件
+          cat > apprunner-config.json << EOF
+{
+  "ServiceName": "$SERVICE_NAME",
+  "SourceConfiguration": {
+    "ImageRepository": {
+      "ImageIdentifier": "${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}",
+      "ImageConfiguration": {
+        "Port": "8081",
+        "RuntimeEnvironmentVariables": {
+          "SPRING_PROFILES_ACTIVE": "prod",
+          "SPRING_CLOUD_CONFIG_ENABLED": "false",
+          "DB_URL": "${{ secrets.AZURE_DB_URL }}",
+          "DB_USERNAME": "${{ secrets.AZURE_DB_USERNAME }}",
+          "DB_PASSWORD": "${{ secrets.AZURE_DB_PASSWORD }}"
+        }
+      },
+      "ImageRepositoryType": "ECR_PUBLIC"
+    },
+    "AutoDeploymentsEnabled": false
+  },
+  "InstanceConfiguration": {
+    "Cpu": "0.25 vCPU",
+    "Memory": "0.5 GB"
+  }
+}
+EOF
+          
+          # 创建服务
+          aws apprunner create-service --cli-input-json file://apprunner-config.json > create-response.json
+          
+          # 获取服务ARN
+          SERVICE_ARN=$(jq -r '.Service.ServiceArn' create-response.json)
+          echo "SERVICE_ARN=$SERVICE_ARN" >> $GITHUB_ENV
+          echo "✅ 新服务创建成功，ARN: $SERVICE_ARN"
         fi
-        
-        echo "✅ App Runner 部署完成"
-        echo "Service ARN: $SERVICE_ARN"
         
     - name: 等待部署完成
       run: |
