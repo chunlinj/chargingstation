@@ -59,13 +59,6 @@ jobs:
       
     - name: 设置Docker Buildx
       uses: docker/setup-buildx-action@v3
-      
-    - name: 配置AWS凭据（用于ECR登录）
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: us-east-1
         
     - name: 调试Docker凭据
       run: |
@@ -91,7 +84,14 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         
-    - name: 登录AWS ECR Public
+    - name: 配置AWS凭据（用于ECR登录）
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+        
+    - name: 登录ECR Public
       run: |
         aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
         
@@ -103,8 +103,8 @@ jobs:
         tags: |
           ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:latest
           ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
-          public.ecr.aws/docker/library/${{ env.APP_NAME }}:latest
-          public.ecr.aws/docker/library/${{ env.APP_NAME }}:${{ github.sha }}
+          public.ecr.aws/x9x8a8j5/charging-station-service:latest
+          public.ecr.aws/x9x8a8j5/charging-station-service:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
@@ -215,7 +215,7 @@ jobs:
         
         # 复制配置文件并替换占位符
         cp aws-apprunner.json temp-apprunner.json
-        sed -i 's|DOCKER_IMAGE_PLACEHOLDER|public.ecr.aws/docker/library/charging-station-service:${{ github.sha }}|g' temp-apprunner.json
+        sed -i 's|DOCKER_IMAGE_PLACEHOLDER|public.ecr.aws/x9x8a8j5/charging-station-service:${{ github.sha }}|g' temp-apprunner.json
         sed -i 's|DB_URL_PLACEHOLDER|${{ secrets.AZURE_DB_URL }}|g' temp-apprunner.json
         sed -i 's|DB_USERNAME_PLACEHOLDER|${{ secrets.AZURE_DB_USERNAME }}|g' temp-apprunner.json
         sed -i 's|DB_PASSWORD_PLACEHOLDER|${{ secrets.AZURE_DB_PASSWORD }}|g' temp-apprunner.json
