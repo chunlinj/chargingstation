@@ -53,6 +53,14 @@ jobs:
     needs: test
     name: 构建并推送Docker镜像
     
+    outputs:
+      docker_username: ${{ steps.parse-config.outputs.docker_username }}
+      azure_resource_group: ${{ steps.parse-config.outputs.azure_resource_group }}
+      azure_db_url: ${{ steps.parse-config.outputs.azure_db_url }}
+      azure_db_username: ${{ steps.parse-config.outputs.azure_db_username }}
+      azure_db_password: ${{ steps.parse-config.outputs.azure_db_password }}
+      azure_app_name: ${{ steps.parse-config.outputs.azure_app_name }}
+    
     steps:
     - name: Checkout代码
       uses: actions/checkout@v4
@@ -60,6 +68,31 @@ jobs:
     - name: 设置Docker Buildx
       uses: docker/setup-buildx-action@v3
       
+    - name: 解析配置
+      id: parse-config
+      run: |
+        echo "$MY_SECRETS" > config.txt
+        DOCKER_USERNAME=$(grep "DOCKER_USERNAME:" config.txt | cut -d' ' -f2)
+        DOCKER_PASSWORD=$(grep "DOCKER_PASSWORD:" config.txt | cut -d' ' -f2)
+        AZURE_RESOURCE_GROUP=$(grep "AZURE_RESOURCE_GROUP:" config.txt | cut -d' ' -f2)
+        AZURE_DB_URL=$(grep "AZURE_DB_URL:" config.txt | cut -d' ' -f2-)
+        AZURE_DB_USERNAME=$(grep "AZURE_DB_USERNAME:" config.txt | cut -d' ' -f2)
+        AZURE_DB_PASSWORD=$(grep "AZURE_DB_PASSWORD:" config.txt | cut -d' ' -f2)
+        AZURE_APP_NAME=$(grep "AZURE_APP_NAME:" config.txt | cut -d' ' -f2)
+        
+        echo "docker_username=$DOCKER_USERNAME" >> $GITHUB_OUTPUT
+        echo "docker_password=$DOCKER_PASSWORD" >> $GITHUB_OUTPUT
+        echo "azure_resource_group=$AZURE_RESOURCE_GROUP" >> $GITHUB_OUTPUT
+        echo "azure_db_url=$AZURE_DB_URL" >> $GITHUB_OUTPUT
+        echo "azure_db_username=$AZURE_DB_USERNAME" >> $GITHUB_OUTPUT
+        echo "azure_db_password=$AZURE_DB_PASSWORD" >> $GITHUB_OUTPUT
+        echo "azure_app_name=$AZURE_APP_NAME" >> $GITHUB_OUTPUT
+        
+        # 清理临时文件
+        rm config.txt
+      env:
+        MY_SECRETS: ${{ secrets.MY_SECRETS }}
+        
     - name: 调试Docker凭据
       run: |
         echo "Username length: ${#USERNAME}"
@@ -75,14 +108,14 @@ jobs:
         fi
         echo "✅ Both username and password are set"
       env:
-        USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        USERNAME: ${{ steps.parse-config.outputs.docker_username }}
+        PASSWORD: ${{ steps.parse-config.outputs.docker_password }}
         
     - name: 登录Docker Hub
       uses: docker/login-action@v3
       with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+        username: ${{ steps.parse-config.outputs.docker_username }}
+        password: ${{ steps.parse-config.outputs.docker_password }}
         
     - name: 构建并推送到Docker Hub
       uses: docker/build-push-action@v5
@@ -90,8 +123,8 @@ jobs:
         context: .
         push: true
         tags: |
-          ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:latest
-          ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+          ${{ steps.parse-config.outputs.docker_username }}/${{ env.APP_NAME }}:latest
+          ${{ steps.parse-config.outputs.docker_username }}/${{ env.APP_NAME }}:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
@@ -102,37 +135,54 @@ jobs:
     if: github.ref == 'refs/heads/main'
     
     steps:
+    - name: 解析Azure配置
+      id: parse-azure-config
+      run: |
+        echo "$MY_SECRETS" > config.txt
+        
+        # 提取AZURE_CREDENTIALS JSON (从第一个{到最后一个})
+        AZURE_CREDENTIALS=$(sed -n '/AZURE_CREDENTIALS: {/,/}/p' config.txt | sed 's/^  AZURE_CREDENTIALS: //')
+        
+        echo "azure_credentials<<EOF" >> $GITHUB_OUTPUT
+        echo "$AZURE_CREDENTIALS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # 清理临时文件
+        rm config.txt
+      env:
+        MY_SECRETS: ${{ secrets.MY_SECRETS }}
+    
     - name: Checkout代码
       uses: actions/checkout@v4
       
     - name: 登录Azure
       uses: azure/login@v1
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        creds: ${{ steps.parse-azure-config.outputs.azure_credentials }}
         
     - name: 部署到Azure Container Instances
       uses: azure/aci-deploy@v1
       with:
-        resource-group: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        resource-group: ${{ needs.build-and-push.outputs.azure_resource_group }}
         dns-name-label: ${{ env.APP_NAME }}-${{ github.run_number }}
-        image: ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+        image: ${{ needs.build-and-push.outputs.docker_username }}/${{ env.APP_NAME }}:${{ github.sha }}
         name: ${{ env.APP_NAME }}
         location: 'East Asia'
         ports: '8081'
         environment-variables: |
           SPRING_PROFILES_ACTIVE=prod
           SPRING_CLOUD_CONFIG_ENABLED=false
-          DB_URL=${{ secrets.AZURE_DB_URL }}
-          DB_USERNAME=${{ secrets.AZURE_DB_USERNAME }}
-          DB_PASSWORD=${{ secrets.AZURE_DB_PASSWORD }}
+          DB_URL=${{ needs.build-and-push.outputs.azure_db_url }}
+          DB_USERNAME=${{ needs.build-and-push.outputs.azure_db_username }}
+          DB_PASSWORD=${{ needs.build-and-push.outputs.azure_db_password }}
         cpu: 1
         memory: 2
         
     - name: 部署到Azure App Service (可选)
       uses: azure/webapps-deploy@v2
       with:
-        app-name: ${{ secrets.AZURE_APP_NAME }}
-        images: ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+        app-name: ${{ needs.build-and-push.outputs.azure_app_name }}
+        images: ${{ needs.build-and-push.outputs.docker_username }}/${{ env.APP_NAME }}:${{ github.sha }}
 
   deploy-aws:
     runs-on: ubuntu-latest
@@ -162,9 +212,9 @@ jobs:
         IMAGE_TAG: ${{ github.sha }}
       run: |
         # 重新标记镜像
-        docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
-        docker tag ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker tag ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        docker pull ${{ needs.build-and-push.outputs.docker_username }}/${{ env.APP_NAME }}:${{ github.sha }}
+        docker tag ${{ needs.build-and-push.outputs.docker_username }}/${{ env.APP_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        docker tag ${{ needs.build-and-push.outputs.docker_username }}/${{ env.APP_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
         
         # 推送到ECR
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
