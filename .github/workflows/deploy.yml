@@ -200,47 +200,40 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
         
-    - name: 超级简单的AWS App Runner部署
+    - name: 智能AWS App Runner部署
       run: |
-        echo "🚀 使用配置文件部署到 AWS App Runner..."
+        echo "🚀 智能部署到 AWS App Runner..."
         
-        # 删除已有服务（如果存在）
+        # 检查服务是否存在
         SERVICE_ARN=$(aws apprunner list-services --query "ServiceList[?ServiceName=='charging-station-service'].ServiceArn" --output text)
-        if [ ! -z "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ]; then
-          echo "删除现有服务: $SERVICE_ARN"
-          aws apprunner delete-service --service-arn "$SERVICE_ARN"
-          echo "等待服务删除..."
-          sleep 60
+        
+        if [ ! -z "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ] && [ "$SERVICE_ARN" != "" ]; then
+          echo "🔄 找到现有服务，触发更新部署: $SERVICE_ARN"
+          
+          # 触发服务更新（App Runner会自动拉取最新镜像）
+          aws apprunner start-deployment --service-arn "$SERVICE_ARN"
+          
+          echo "✅ 服务更新已触发！App Runner将自动拉取最新镜像并进行滚动更新"
+          
+        else
+          echo "📦 未找到现有服务，创建新服务..."
+          
+          # 复制配置文件并替换占位符
+          cp aws-apprunner.json temp-apprunner.json
+          sed -i 's|DOCKER_IMAGE_PLACEHOLDER|public.ecr.aws/x9x8a8j5/charging-station-service:${{ github.sha }}|g' temp-apprunner.json
+          sed -i 's|DB_URL_PLACEHOLDER|${{ secrets.AZURE_DB_URL }}|g' temp-apprunner.json
+          sed -i 's|DB_USERNAME_PLACEHOLDER|${{ secrets.AZURE_DB_USERNAME }}|g' temp-apprunner.json
+          sed -i 's|DB_PASSWORD_PLACEHOLDER|${{ secrets.AZURE_DB_PASSWORD }}|g' temp-apprunner.json
+          
+          # 创建新服务
+          aws apprunner create-service --cli-input-json file://temp-apprunner.json
+          
+          # 清理
+          rm temp-apprunner.json
+          
+          echo "✅ 新服务创建完成！"
         fi
         
-        # 复制配置文件并替换占位符
-        cp aws-apprunner.json temp-apprunner.json
-        sed -i 's|DOCKER_IMAGE_PLACEHOLDER|public.ecr.aws/x9x8a8j5/charging-station-service:${{ github.sha }}|g' temp-apprunner.json
-        sed -i 's|DB_URL_PLACEHOLDER|${{ secrets.AZURE_DB_URL }}|g' temp-apprunner.json
-        sed -i 's|DB_USERNAME_PLACEHOLDER|${{ secrets.AZURE_DB_USERNAME }}|g' temp-apprunner.json
-        sed -i 's|DB_PASSWORD_PLACEHOLDER|${{ secrets.AZURE_DB_PASSWORD }}|g' temp-apprunner.json
-        
-        # 创建服务
-        echo "创建App Runner服务..."
-        aws apprunner create-service --cli-input-json file://temp-apprunner.json
-        
-        # 清理
-        rm temp-apprunner.json
-        
-        echo "✅ AWS App Runner 部署完成！"
+        echo "🎯 AWS App Runner 部署完成！"
 
-  deploy-notification:
-    runs-on: ubuntu-latest
-    needs: [deploy-azure, deploy-aws]
-    name: 部署通知
-    if: always()
-    
-    steps:
-    - name: 发送部署通知
-      uses: 8398a7/action-slack@v3
-      if: always()
-      with:
-        status: ${{ job.status }}
-        channel: '#deployments'
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-        fields: repo,message,commit,author,action,eventName,ref,workflow 
+  # 可以在这里添加其他后续步骤 
