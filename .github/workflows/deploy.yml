@@ -208,36 +208,30 @@ jobs:
         else
           echo "📦 服务不存在，创建新的 App Runner 服务..."
           
-          # 创建服务配置文件
-          cat > apprunner-config.json << EOF
-{
-  "ServiceName": "$SERVICE_NAME",
-  "SourceConfiguration": {
-    "ImageRepository": {
-      "ImageIdentifier": "${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}",
-      "ImageConfiguration": {
-        "Port": "8081",
-        "RuntimeEnvironmentVariables": {
-          "SPRING_PROFILES_ACTIVE": "prod",
-          "SPRING_CLOUD_CONFIG_ENABLED": "false",
-          "DB_URL": "${{ secrets.AZURE_DB_URL }}",
-          "DB_USERNAME": "${{ secrets.AZURE_DB_USERNAME }}",
-          "DB_PASSWORD": "${{ secrets.AZURE_DB_PASSWORD }}"
-        }
-      },
-      "ImageRepositoryType": "ECR_PUBLIC"
-    },
-    "AutoDeploymentsEnabled": false
-  },
-  "InstanceConfiguration": {
-    "Cpu": "0.25 vCPU",
-    "Memory": "0.5 GB"
-  }
-}
-EOF
-          
-          # 创建服务
-          aws apprunner create-service --cli-input-json file://apprunner-config.json > create-response.json
+          # 使用AWS CLI直接创建服务，避免JSON文件
+          aws apprunner create-service \
+            --service-name "$SERVICE_NAME" \
+            --source-configuration '{
+              "ImageRepository": {
+                "ImageIdentifier": "'${{ secrets.DOCKER_USERNAME }}'/'${{ env.APP_NAME }}':'${{ github.sha }}'",
+                "ImageConfiguration": {
+                  "Port": "8081",
+                  "RuntimeEnvironmentVariables": {
+                    "SPRING_PROFILES_ACTIVE": "prod",
+                    "SPRING_CLOUD_CONFIG_ENABLED": "false",
+                    "DB_URL": "'${{ secrets.AZURE_DB_URL }}'",
+                    "DB_USERNAME": "'${{ secrets.AZURE_DB_USERNAME }}'",
+                    "DB_PASSWORD": "'${{ secrets.AZURE_DB_PASSWORD }}'"
+                  }
+                },
+                "ImageRepositoryType": "ECR_PUBLIC"
+              },
+              "AutoDeploymentsEnabled": false
+            }' \
+            --instance-configuration '{
+              "Cpu": "0.25 vCPU",
+              "Memory": "0.5 GB"
+            }' > create-response.json
           
           # 获取服务ARN
           SERVICE_ARN=$(jq -r '.Service.ServiceArn' create-response.json)
