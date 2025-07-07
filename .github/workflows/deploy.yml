@@ -214,22 +214,25 @@ jobs:
         # 检查特定服务名称的服务 - 改进查询方式
         echo "🔍 查找charging-station-service服务..."
         
-        # 方法1：直接查询JSON格式
-        echo "🔍 方法1：JSON格式查询..."
-        aws apprunner list-services --output json | jq '.ServiceList[] | select(.ServiceName=="charging-station-service") | .ServiceArn'
-        
-        # 方法2：改进的JMESPath查询
-        echo "🔍 方法2：改进的查询..."
-        SERVICE_ARN=$(aws apprunner list-services --query 'ServiceList[?ServiceName==`charging-station-service`].ServiceArn' --output text)
+        # 方法1：从table输出中提取ARN（最可靠）
+        echo "🔍 方法1：从table输出提取ARN..."
+        SERVICE_ARN=$(aws apprunner list-services --output table | grep charging-station-service | awk '{print $4}' | tr -d '|' | xargs)
         
         echo "🔍 调试信息："
         echo "SERVICE_ARN 原始值: '$SERVICE_ARN'"
         echo "SERVICE_ARN 长度: ${#SERVICE_ARN}"
         
-        # 如果方法2失败，尝试方法3
+        # 如果方法1失败，尝试文本输出方式
         if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ] || [ "$SERVICE_ARN" = "null" ]; then
-          echo "🔍 方法3：使用grep方式查找..."
+          echo "🔍 方法2：使用text输出格式..."
           SERVICE_ARN=$(aws apprunner list-services --output text | grep charging-station-service | awk '{print $2}')
+          echo "🔍 方法2结果: '$SERVICE_ARN'"
+        fi
+        
+        # 如果还是失败，尝试JMESPath（但用更简单的方式）
+        if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ] || [ "$SERVICE_ARN" = "null" ]; then
+          echo "🔍 方法3：JMESPath查询..."
+          SERVICE_ARN=$(aws apprunner list-services --query 'ServiceList[?ServiceName==`charging-station-service`].ServiceArn' --output text)
           echo "🔍 方法3结果: '$SERVICE_ARN'"
         fi
         
