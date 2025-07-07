@@ -208,40 +208,52 @@ jobs:
         else
           echo "📦 服务不存在，创建新的 App Runner 服务..."
           
-          # 创建临时配置文件（避免YAML缩进问题）
-          echo '{
-            "ServiceName": "'$SERVICE_NAME'",
-            "SourceConfiguration": {
-              "ImageRepository": {
-                "ImageIdentifier": "'${{ secrets.DOCKER_USERNAME }}'/'${{ env.APP_NAME }}':'${{ github.sha }}'",
-                "ImageConfiguration": {
-                  "Port": "8081",
-                  "RuntimeEnvironmentVariables": {
-                    "SPRING_PROFILES_ACTIVE": "prod",
-                    "SPRING_CLOUD_CONFIG_ENABLED": "false",
-                    "DB_URL": "'${{ secrets.AZURE_DB_URL }}'",
-                    "DB_USERNAME": "'${{ secrets.AZURE_DB_USERNAME }}'",
-                    "DB_PASSWORD": "'${{ secrets.AZURE_DB_PASSWORD }}'"
-                  }
-                },
-                "ImageRepositoryType": "ECR_PUBLIC"
-              },
-              "AutoDeploymentsEnabled": false
-            },
-            "InstanceConfiguration": {
-              "Cpu": "0.25 vCPU",
-              "Memory": "0.5 GB"
-            }
-          }' > /tmp/apprunner-config.json
+          # 将环境变量赋给shell变量（避免JSON中的特殊字符问题）
+          DB_URL="${{ secrets.AZURE_DB_URL }}"
+          DB_USERNAME="${{ secrets.AZURE_DB_USERNAME }}"
+          DB_PASSWORD="${{ secrets.AZURE_DB_PASSWORD }}"
+          
+          # 创建配置文件，使用shell变量替换
+          cat > /tmp/apprunner-create.json << EOF
+{
+  "ServiceName": "$SERVICE_NAME",
+  "SourceConfiguration": {
+    "ImageRepository": {
+      "ImageIdentifier": "${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}",
+      "ImageConfiguration": {
+        "Port": "8081",
+        "RuntimeEnvironmentVariables": {
+          "SPRING_PROFILES_ACTIVE": "prod",
+          "SPRING_CLOUD_CONFIG_ENABLED": "false",
+          "DB_URL": "$DB_URL",
+          "DB_USERNAME": "$DB_USERNAME",
+          "DB_PASSWORD": "$DB_PASSWORD"
+        }
+      },
+      "ImageRepositoryType": "ECR_PUBLIC"
+    },
+    "AutoDeploymentsEnabled": false
+  },
+  "InstanceConfiguration": {
+    "Cpu": "0.25 vCPU",
+    "Memory": "0.5 GB"
+  }
+}
+EOF
           
           # 创建服务
-          aws apprunner create-service --cli-input-json file:///tmp/apprunner-config.json > create-response.json
+          aws apprunner create-service --cli-input-json file:///tmp/apprunner-create.json > create-response.json
           
           # 获取服务ARN
           SERVICE_ARN=$(jq -r '.Service.ServiceArn' create-response.json)
           echo "SERVICE_ARN=$SERVICE_ARN" >> $GITHUB_ENV
           echo "✅ 新服务创建成功，ARN: $SERVICE_ARN"
         fi
+        
+    - name: 清理临时文件
+      if: always()
+      run: |
+        rm -f /tmp/apprunner-create.json /tmp/env-config.json /tmp/final-env.json 2>/dev/null || true
         
     - name: 等待部署完成
       run: |
