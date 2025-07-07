@@ -187,36 +187,62 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
         
-    - name: 登录AWS ECR
-      id: login-ecr
-      uses: aws-actions/amazon-ecr-login@v2
-      
-    - name: 推送镜像到ECR
-      env:
-        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-        ECR_REPOSITORY: ${{ env.APP_NAME }}
-        IMAGE_TAG: ${{ github.sha }}
+    - name: 部署到AWS App Runner
       run: |
-        # 重新标记镜像
-        docker pull ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
-        docker tag ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker tag ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        echo "🚀 部署到 AWS App Runner..."
         
-        # 推送到ECR
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-        docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+        # 检查App Runner服务是否存在
+        SERVICE_EXISTS=$(aws apprunner list-services --query "ServiceList[?ServiceName=='${{ env.APP_NAME }}']" --output text)
         
-    - name: 更新ECS服务
-      run: |
-        aws ecs update-service \
-          --cluster ${{ secrets.AWS_ECS_CLUSTER }} \
-          --service ${{ secrets.AWS_ECS_SERVICE }} \
-          --force-new-deployment
+        if [ -z "$SERVICE_EXISTS" ]; then
+          echo "📦 创建新的 App Runner 服务..."
+          aws apprunner create-service \
+            --service-name ${{ env.APP_NAME }} \
+            --source-configuration '{
+              "ImageRepository": {
+                "ImageIdentifier": "${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}",
+                "ImageConfiguration": {
+                  "Port": "8081",
+                  "RuntimeEnvironmentVariables": {
+                    "SPRING_PROFILES_ACTIVE": "prod",
+                    "SPRING_CLOUD_CONFIG_ENABLED": "false",
+                    "DB_URL": "${{ secrets.AZURE_DB_URL }}",
+                    "DB_USERNAME": "${{ secrets.AZURE_DB_USERNAME }}",
+                    "DB_PASSWORD": "${{ secrets.AZURE_DB_PASSWORD }}"
+                  }
+                },
+                "ImageRepositoryType": "ECR_PUBLIC"
+              },
+              "AutoDeploymentsEnabled": false
+            }' \
+            --instance-configuration '{
+              "Cpu": "0.25 vCPU",
+              "Memory": "0.5 GB"
+            }' > app-runner-create.json
+            
+          # 获取服务ARN
+          SERVICE_ARN=$(jq -r '.Service.ServiceArn' app-runner-create.json)
+          echo "SERVICE_ARN=$SERVICE_ARN" >> $GITHUB_ENV
           
-    - name: 部署到AWS App Runner (可选)
+        else
+          echo "🔄 更新现有的 App Runner 服务..."
+          SERVICE_ARN=$(aws apprunner list-services --query "ServiceList[?ServiceName=='${{ env.APP_NAME }}'].ServiceArn" --output text)
+          echo "SERVICE_ARN=$SERVICE_ARN" >> $GITHUB_ENV
+          
+          aws apprunner start-deployment --service-arn $SERVICE_ARN
+        fi
+        
+        echo "✅ App Runner 部署完成"
+        echo "Service ARN: $SERVICE_ARN"
+        
+    - name: 等待部署完成
       run: |
-        aws apprunner start-deployment \
-          --service-arn ${{ secrets.AWS_APPRUNNER_SERVICE_ARN }}
+        echo "⏳ 等待 App Runner 部署完成..."
+        aws apprunner wait service-running --service-arn $SERVICE_ARN
+        
+        # 获取服务URL
+        SERVICE_URL=$(aws apprunner describe-service --service-arn $SERVICE_ARN --query 'Service.ServiceUrl' --output text)
+        echo "🌐 App Runner 服务 URL: https://$SERVICE_URL"
 
   deploy-notification:
     runs-on: ubuntu-latest
