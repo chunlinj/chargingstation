@@ -131,6 +131,9 @@ jobs:
         
     - name: 配置Azure App Service应用设置
       run: |
+        echo "🔧 配置 App Service 环境变量和端口..."
+        
+        # 配置环境变量
         az webapp config appsettings set \
           --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
           --name ${{ secrets.AZURE_APP_NAME }} \
@@ -140,7 +143,26 @@ jobs:
             DB_URL="${{ secrets.AZURE_DB_URL }}" \
             DB_USERNAME="${{ secrets.AZURE_DB_USERNAME }}" \
             DB_PASSWORD="${{ secrets.AZURE_DB_PASSWORD }}" \
-            WEBSITES_PORT=8081
+            WEBSITES_PORT=8081 \
+            PORT=8081 \
+            SERVER_PORT=8081
+            
+        # 配置容器端口
+        az webapp config set \
+          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+          --name ${{ secrets.AZURE_APP_NAME }} \
+          --linux-fx-version "DOCKER|${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}"
+          
+        echo "✅ App Service 配置完成"
+        
+    - name: 验证配置
+      run: |
+        echo "🔍 验证 App Service 配置..."
+        az webapp show \
+          --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+          --name ${{ secrets.AZURE_APP_NAME }} \
+          --query "{state: state, defaultHostName: defaultHostName, linuxFxVersion: siteConfig.linuxFxVersion}" \
+          --output table
         
     - name: 部署到Azure App Service
       uses: azure/webapps-deploy@v2
