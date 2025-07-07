@@ -1,0 +1,23 @@
+{
+  "ServiceName": "charging-station-service",
+  "SourceConfiguration": {
+    "ImageRepository": {
+      "ImageIdentifier": "DOCKER_IMAGE_PLACEHOLDER",
+      "ImageConfiguration": {
+        "Port": "8081",
+        "RuntimeEnvironmentVariables": {
+          "SPRING_PROFILES_ACTIVE": "prod",
+          "DB_URL": "DB_URL_PLACEHOLDER",
+          "DB_USERNAME": "DB_USERNAME_PLACEHOLDER", 
+          "DB_PASSWORD": "DB_PASSWORD_PLACEHOLDER"
+        }
+      },
+      "ImageRepositoryType": "ECR_PUBLIC"
+    },
+    "AutoDeploymentsEnabled": false
+  },
+  "InstanceConfiguration": {
+    "Cpu": "0.25 vCPU",
+    "Memory": "0.5 GB"
+  }
+} 

@@ -59,6 +59,13 @@ jobs:
       
     - name: 设置Docker Buildx
       uses: docker/setup-buildx-action@v3
+      
+    - name: 配置AWS凭据（用于ECR登录）
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
         
     - name: 调试Docker凭据
       run: |
@@ -84,7 +91,11 @@ jobs:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
         
-    - name: 构建并推送到Docker Hub
+    - name: 登录AWS ECR Public
+      run: |
+        aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
+        
+    - name: 构建并推送到Docker Hub和ECR Public
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -92,6 +103,8 @@ jobs:
         tags: |
           ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:latest
           ${{ secrets.DOCKER_USERNAME }}/${{ env.APP_NAME }}:${{ github.sha }}
+          public.ecr.aws/docker/library/${{ env.APP_NAME }}:latest
+          public.ecr.aws/docker/library/${{ env.APP_NAME }}:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
@@ -177,6 +190,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     
     steps:
+    - name: Checkout代码
+      uses: actions/checkout@v4
+      
     - name: 配置AWS凭据
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -184,47 +200,32 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
         
-    - name: 简单部署到AWS App Runner
+    - name: 超级简单的AWS App Runner部署
       run: |
-        echo "🚀 简单部署到 AWS App Runner..."
+        echo "🚀 使用配置文件部署到 AWS App Runner..."
         
-        # 尝试删除已有服务（如果存在）
-        aws apprunner list-services --query "ServiceList[?ServiceName=='charging-station-service'].ServiceArn" --output text | while read arn; do
-          if [ ! -z "$arn" ]; then
-            echo "删除现有服务: $arn"
-            aws apprunner delete-service --service-arn "$arn" || true
-          fi
-        done
+        # 删除已有服务（如果存在）
+        SERVICE_ARN=$(aws apprunner list-services --query "ServiceList[?ServiceName=='charging-station-service'].ServiceArn" --output text)
+        if [ ! -z "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ]; then
+          echo "删除现有服务: $SERVICE_ARN"
+          aws apprunner delete-service --service-arn "$SERVICE_ARN"
+          echo "等待服务删除..."
+          sleep 60
+        fi
         
-        # 等待删除完成
-        sleep 30
-        
-        # 生成简单配置
-        echo '{
-          "ServiceName": "charging-station-service",
-          "SourceConfiguration": {
-            "ImageRepository": {
-              "ImageIdentifier": "${{ secrets.DOCKER_USERNAME }}/charging-station-service:${{ github.sha }}",
-              "ImageConfiguration": {
-                "Port": "8081",
-                "RuntimeEnvironmentVariables": {
-                  "SPRING_PROFILES_ACTIVE": "prod",
-                  "DB_URL": "${{ secrets.AZURE_DB_URL }}",
-                  "DB_USERNAME": "${{ secrets.AZURE_DB_USERNAME }}",
-                  "DB_PASSWORD": "${{ secrets.AZURE_DB_PASSWORD }}"
-                }
-              },
-              "ImageRepositoryType": "ECR_PUBLIC"
-            }
-          },
-          "InstanceConfiguration": {
-            "Cpu": "0.25 vCPU",
-            "Memory": "0.5 GB"
-          }
-        }' > apprunner.json
+        # 复制配置文件并替换占位符
+        cp aws-apprunner.json temp-apprunner.json
+        sed -i 's|DOCKER_IMAGE_PLACEHOLDER|public.ecr.aws/docker/library/charging-station-service:${{ github.sha }}|g' temp-apprunner.json
+        sed -i 's|DB_URL_PLACEHOLDER|${{ secrets.AZURE_DB_URL }}|g' temp-apprunner.json
+        sed -i 's|DB_USERNAME_PLACEHOLDER|${{ secrets.AZURE_DB_USERNAME }}|g' temp-apprunner.json
+        sed -i 's|DB_PASSWORD_PLACEHOLDER|${{ secrets.AZURE_DB_PASSWORD }}|g' temp-apprunner.json
         
         # 创建服务
-        aws apprunner create-service --cli-input-json file://apprunner.json
+        echo "创建App Runner服务..."
+        aws apprunner create-service --cli-input-json file://temp-apprunner.json
+        
+        # 清理
+        rm temp-apprunner.json
         
         echo "✅ AWS App Runner 部署完成！"
 
