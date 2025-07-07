@@ -240,14 +240,50 @@ jobs:
         if [ -n "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ] && [ "$SERVICE_ARN" != "null" ] && [ "$SERVICE_ARN" != "" ]; then
           echo "🔄 找到现有服务: $SERVICE_ARN"
           
-          # 检查服务状态（仅用于日志显示）
+          # 检查服务状态
           SERVICE_STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.Status" --output text)
           echo "📊 服务当前状态: $SERVICE_STATUS"
           
-          echo "🔄 触发服务更新部署（不管当前状态如何）..."
-          # 触发服务更新 - App Runner会用新镜像重新部署
-          aws apprunner start-deployment --service-arn "$SERVICE_ARN"
-          echo "✅ 服务更新已触发！App Runner将用最新镜像重新部署，这会修复任何启动问题"
+          # 智能状态处理
+          if [ "$SERVICE_STATUS" = "RUNNING" ]; then
+            echo "✅ 服务正常运行，触发零停机更新部署..."
+            aws apprunner start-deployment --service-arn "$SERVICE_ARN"
+            echo "🎯 零停机更新已触发！App Runner将进行滚动部署"
+            
+          elif [ "$SERVICE_STATUS" = "PAUSED" ]; then
+            echo "⏸️ 服务已暂停，先恢复服务再更新..."
+            aws apprunner resume-service --service-arn "$SERVICE_ARN"
+            echo "⏳ 等待服务恢复..."
+            aws apprunner wait service-running --service-arn "$SERVICE_ARN"
+            echo "🔄 服务已恢复，触发更新部署..."
+            aws apprunner start-deployment --service-arn "$SERVICE_ARN"
+            echo "✅ 更新部署已触发！"
+            
+          else
+            echo "❌ 服务状态异常 ($SERVICE_STATUS)，删除后重新创建..."
+            echo "📝 常见异常状态：CREATE_FAILED, DELETE_FAILED, OPERATION_IN_PROGRESS"
+            
+            # 删除异常服务
+            echo "🗑️ 删除异常服务..."
+            aws apprunner delete-service --service-arn "$SERVICE_ARN"
+            
+            # 等待删除完成
+            echo "⏳ 等待服务完全删除..."
+            aws apprunner wait service-deleted --service-arn "$SERVICE_ARN"
+            echo "✅ 异常服务已删除"
+            
+            # 创建新服务
+            echo "📦 创建新的健康服务..."
+            cp aws-apprunner.json temp-apprunner.json
+            sed -i 's|DOCKER_IMAGE_PLACEHOLDER|public.ecr.aws/x9x8a8j5/charging-station-service:${{ github.sha }}|g' temp-apprunner.json
+            sed -i 's|DB_URL_PLACEHOLDER|${{ secrets.AZURE_DB_URL }}|g' temp-apprunner.json
+            sed -i 's|DB_USERNAME_PLACEHOLDER|${{ secrets.AZURE_DB_USERNAME }}|g' temp-apprunner.json
+            sed -i 's|DB_PASSWORD_PLACEHOLDER|${{ secrets.AZURE_DB_PASSWORD }}|g' temp-apprunner.json
+            
+            aws apprunner create-service --cli-input-json file://temp-apprunner.json
+            rm temp-apprunner.json
+            echo "✅ 新服务创建完成！"
+          fi
           
         else
           echo "📦 未找到现有服务，创建新服务..."
