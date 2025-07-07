@@ -37,7 +37,7 @@ jobs:
         key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
         restore-keys: ${{ runner.os }}-m2
         
-    - name: 运行测试1
+    - name: 运行测试2
       run: mvn clean test
       
     - name: 生成测试报告
