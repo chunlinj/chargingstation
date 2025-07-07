@@ -267,10 +267,28 @@ jobs:
             echo "🗑️ 删除异常服务..."
             aws apprunner delete-service --service-arn "$SERVICE_ARN"
             
-            # 等待删除完成
+            # 等待删除完成 - 使用轮询方式
             echo "⏳ 等待服务完全删除..."
-            aws apprunner wait service-deleted --service-arn "$SERVICE_ARN"
-            echo "✅ 异常服务已删除"
+            max_attempts=30
+            attempt=0
+            while [ $attempt -lt $max_attempts ]; do
+              REMAINING_SERVICE=$(aws apprunner list-services --query "ServiceList[?ServiceName=='charging-station-service'].ServiceArn" --output text 2>/dev/null || echo "")
+              if [ -z "$REMAINING_SERVICE" ] || [ "$REMAINING_SERVICE" = "None" ]; then
+                echo "✅ 服务已完全删除"
+                break
+              fi
+              echo "⏳ 删除进行中，等待30秒... (尝试 $((attempt+1))/$max_attempts)"
+              sleep 30
+              attempt=$((attempt+1))
+            done
+            
+            if [ $attempt -eq $max_attempts ]; then
+              echo "⚠️ 删除超时，但继续创建新服务..."
+            fi
+            
+            # 额外等待确保AWS清理完成
+            echo "⏳ 额外等待30秒确保AWS完全清理..."
+            sleep 30
             
             # 创建新服务
             echo "📦 创建新的健康服务..."
@@ -280,6 +298,10 @@ jobs:
             sed -i 's|DB_USERNAME_PLACEHOLDER|${{ secrets.AZURE_DB_USERNAME }}|g' temp-apprunner.json
             sed -i 's|DB_PASSWORD_PLACEHOLDER|${{ secrets.AZURE_DB_PASSWORD }}|g' temp-apprunner.json
             
+            echo "🔍 调试：检查生成的配置文件..."
+            cat temp-apprunner.json
+            
+            echo "🚀 执行创建命令..."
             aws apprunner create-service --cli-input-json file://temp-apprunner.json
             rm temp-apprunner.json
             echo "✅ 新服务创建完成！"
