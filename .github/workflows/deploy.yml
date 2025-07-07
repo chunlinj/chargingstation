@@ -204,16 +204,30 @@ jobs:
       run: |
         echo "🚀 智能部署到 AWS App Runner..."
         
-        # 检查服务是否存在
+        # 先列出所有服务进行调试
+        echo "🔍 调试：列出所有App Runner服务..."
+        aws apprunner list-services --output table
+        
+        # 检查特定服务名称的服务
+        echo "🔍 查找charging-station-service服务..."
         SERVICE_ARN=$(aws apprunner list-services --query "ServiceList[?ServiceName=='charging-station-service'].ServiceArn" --output text)
         
-        if [ ! -z "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ] && [ "$SERVICE_ARN" != "" ]; then
-          echo "🔄 找到现有服务，触发更新部署: $SERVICE_ARN"
+        echo "🔍 调试信息："
+        echo "SERVICE_ARN 原始值: '$SERVICE_ARN'"
+        echo "SERVICE_ARN 长度: ${#SERVICE_ARN}"
+        
+        # 简化逻辑：找到服务就更新，找不到就创建
+        if [ -n "$SERVICE_ARN" ] && [ "$SERVICE_ARN" != "None" ] && [ "$SERVICE_ARN" != "null" ] && [ "$SERVICE_ARN" != "" ]; then
+          echo "🔄 找到现有服务: $SERVICE_ARN"
           
-          # 触发服务更新（App Runner会自动拉取最新镜像）
+          # 检查服务状态（仅用于日志显示）
+          SERVICE_STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query "Service.Status" --output text)
+          echo "📊 服务当前状态: $SERVICE_STATUS"
+          
+          echo "🔄 触发服务更新部署（不管当前状态如何）..."
+          # 触发服务更新 - App Runner会用新镜像重新部署
           aws apprunner start-deployment --service-arn "$SERVICE_ARN"
-          
-          echo "✅ 服务更新已触发！App Runner将自动拉取最新镜像并进行滚动更新"
+          echo "✅ 服务更新已触发！App Runner将用最新镜像重新部署，这会修复任何启动问题"
           
         else
           echo "📦 未找到现有服务，创建新服务..."
