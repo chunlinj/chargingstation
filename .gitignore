@@ -50,6 +50,7 @@ gradle-app.setting
 *.iml
 *.ipr
 .vscode/
+.cursor/
 .settings/
 .project
 .classpath

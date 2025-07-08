@@ -340,22 +340,6 @@ ab -n 100 -c 5 -p location-data.json -T application/json \
   http://localhost:8081/charging-station/api/v1/locations
 ```
 
-## 📊 监控和健康检查
-
-### Health Check
-```bash
-curl http://localhost:8081/charging-station/actuator/health
-```
-
-### Metrics
-```bash
-curl http://localhost:8081/charging-station/actuator/metrics
-```
-
-### 应用信息
-```bash
-curl http://localhost:8081/charging-station/actuator/info
-```
 
 ## 🐳 Docker部署
 
@@ -374,26 +358,6 @@ docker run -d -p 8081:8081 \
   charging-station-service
 ```
 
-## 🛠️ 开发指南
-
-### 开发脚本使用
-
-```bash
-# 查看所有可用命令
-./scripts/dev.sh help
-
-# 检查开发环境
-./scripts/dev.sh check-prereq
-
-# 完整CI流水线
-./scripts/dev.sh ci
-
-# 启动开发环境
-./scripts/dev.sh run
-
-# 重置环境
-./scripts/dev.sh reset
-```
 
 ### 数据库访问
 
@@ -432,6 +396,7 @@ export SPRING_PROFILES_ACTIVE=prod
 export DB_URL="jdbc:mysql://your-mysql-host:3306/chargingstation?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8"
 export DB_USERNAME=your-username
 export DB_PASSWORD=your-password
+# 将SPRING_CLOUD_CONFIG_ENABLED 设置为true 再配置注册中心和config
 # export EUREKA_URL=http://your-eureka:8761/eureka/
 # export CONFIG_SERVER_URL=http://your-config-server:8888
 ```
@@ -471,4 +436,3 @@ export DB_PASSWORD=your-password
 **快速链接**:
 - [Swagger API文档](https://charging-station-service-hrcbddgvh5bqc3de.eastasia-01.azurewebsites.net/charging-station/swagger-ui/index.html)
 - [Health Check](https://charging-station-service-hrcbddgvh5bqc3de.eastasia-01.azurewebsites.net/charging-station/actuator/health)
-- [H2数据库控制台](http://localhost:8081/charging-station/h2-console) 
