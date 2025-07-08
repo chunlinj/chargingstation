@@ -1,6 +1,6 @@
 # 电动汽车充电站管理系统
 
-[![CI/CD Pipeline](https://github.com/your-username/charging-station-service/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/your-username/charging-station-service/actions)
+[![CI/CD Pipeline](https://github.com/chunlinj/charging-station-service/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/chunlinj/chargingstation/actions)
 [![Java](https://img.shields.io/badge/Java-17-orange.svg)](https://www.oracle.com/java/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.0-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -406,7 +406,7 @@ docker run -d -p 8081:8081 \
 #### MySQL (生产环境)
 ```bash
 # 连接MySQL
-mysql -h localhost -u chargingstation -p chargingstation
+mysql -h localhost -u chargingstation -p password
 
 # 或者使用完整连接字符串
 mysql -h localhost -P 3306 -u chargingstation -p \
@@ -432,8 +432,8 @@ export SPRING_PROFILES_ACTIVE=prod
 export DB_URL="jdbc:mysql://your-mysql-host:3306/chargingstation?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8"
 export DB_USERNAME=your-username
 export DB_PASSWORD=your-password
-export EUREKA_URL=http://your-eureka:8761/eureka/
-export CONFIG_SERVER_URL=http://your-config-server:8888
+# export EUREKA_URL=http://your-eureka:8761/eureka/
+# export CONFIG_SERVER_URL=http://your-config-server:8888
 ```
 
 ## 📄 错误码说明
@@ -469,6 +469,6 @@ export CONFIG_SERVER_URL=http://your-config-server:8888
 ---
 
 **快速链接**:
-- [Swagger API文档](http://localhost:8081/charging-station/swagger-ui.html)
-- [Health Check](http://localhost:8081/charging-station/actuator/health)
+- [Swagger API文档](https://charging-station-service-hrcbddgvh5bqc3de.eastasia-01.azurewebsites.net/charging-station/swagger-ui/index.html)
+- [Health Check](https://charging-station-service-hrcbddgvh5bqc3de.eastasia-01.azurewebsites.net/charging-station/actuator/health)
 - [H2数据库控制台](http://localhost:8081/charging-station/h2-console) 
