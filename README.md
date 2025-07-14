@@ -9,6 +9,81 @@
 
 ## 🏗️ 系统架构
 
+### 云基础设施架构
+
+```mermaid
+graph TB
+    %% 源代码和CI/CD
+    subgraph "💻 Source & CI/CD"
+        A[📁 GitHub Repository<br/>Spring Boot App<br/>Java 17 + Maven]
+        B[🔄 GitHub Actions<br/>Test → Build → Deploy]
+        A --> B
+    end
+    
+    %% 容器仓库
+    subgraph "📦 Container Registries"
+        C[🐳 Docker Hub<br/>chunlinj/charging-station-service]
+        D[🟠 AWS ECR Public<br/>public.ecr.aws/x9x8a8j5/charging-station-service]
+        B --> C
+        B --> D
+    end
+    
+    %% 数据库
+    subgraph "🗄️ Database"
+        F[🔵 Azure MySQL Flexible Server<br/>chargingstation-db<br/>SSL Enabled<br/>共享数据库]
+    end
+    
+    %% 云平台部署
+    subgraph "☁️ Cloud Platforms"
+        E[🔵 Azure App Service<br/>charging-station-service<br/>1 vCPU, 2GB RAM<br/>Port: 8081]
+        G[🟠 AWS App Runner<br/>charging-station-service<br/>1 vCPU, 2GB RAM<br/>Port: 8081]
+    end
+    
+    %% 访问层
+    subgraph "🌐 Public Access"
+        H[📖 Swagger UI<br/>API Documentation]
+        I[🔍 Health Check<br/>Actuator Endpoints]
+        J[🔒 HTTPS Access<br/>SSL/TLS Secured]
+    end
+    
+    %% 连接关系
+    C --> E
+    D --> G
+    E --> F
+    G --> F
+    E --> H
+    E --> I
+    G --> H
+    G --> I
+    E --> J
+    G --> J
+    
+    %% 样式定义
+    classDef azure fill:#0078d4,stroke:#fff,stroke-width:2px,color:#fff
+    classDef aws fill:#ff9900,stroke:#fff,stroke-width:2px,color:#fff
+    classDef github fill:#24292e,stroke:#fff,stroke-width:2px,color:#fff
+    classDef docker fill:#2496ed,stroke:#fff,stroke-width:2px,color:#fff
+    classDef database fill:#336791,stroke:#fff,stroke-width:2px,color:#fff
+    classDef access fill:#28a745,stroke:#fff,stroke-width:2px,color:#fff
+    
+    class A,B github
+    class C docker
+    class D,G aws
+    class E,F azure
+    class H,I,J access
+```
+
+### 架构特点
+
+- **多云部署**: 同时部署到Azure App Service和AWS App Runner，实现高可用性
+- **零停机更新**: 通过容器化部署支持滚动更新
+- **自动化CI/CD**: GitHub Actions自动化测试、构建和部署流程
+- **统一数据库**: 使用Azure MySQL作为统一数据源
+- **容器化**: Docker容器确保环境一致性和可移植性
+- **监控和文档**: 集成Spring Boot Actuator和Swagger UI
+
+### 技术栈
+
 - **领域驱动设计(DDD)** - 清晰的领域模型和业务逻辑分离
 - **事件驱动架构(EDD)** - 解耦的组件通信和状态变更通知
 - **微服务架构** - 基于Spring Cloud的可扩展服务
