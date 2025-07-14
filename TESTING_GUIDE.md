@@ -52,7 +52,7 @@ mvn test -Dtest=ChargingStationMySQLIntegrationTest
 ```bash
 # 测试MySQL连接
 mysql -h localhost -u root -p
-# 输入密码：Rtgk@2022.07~c1
+输入密码：you password
 
 # 检查数据库是否存在
 SHOW DATABASES;

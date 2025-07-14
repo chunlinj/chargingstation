@@ -49,7 +49,7 @@ cd charging-station-service
 使用提供的开发脚本：
 
 ```bash
-# 检查前置条件
+# 检查前置条件(linux环境下)
 ./scripts/dev.sh check-prereq
 
 # 编译和测试
@@ -255,15 +255,15 @@ DELETE /api/v1/connectors/{connectorId}
 
 #### 选项A：MySQL直连测试 ✅ **推荐**
 ```bash
-# 在IDE中运行（推荐）
-# 打开: src/test/java/com/emsp/chargingstation/integration/ChargingStationMySQLIntegrationTest.java
-# 右键运行: testCompleteChargingStationWorkflow
+在IDE中运行（推荐）
+打开: src/test/java/com/emsp/chargingstation/integration/ChargingStationMySQLIntegrationTest.java
+右键运行: testCompleteChargingStationWorkflow
 
 # 或使用Maven（需要Maven环境）
 mvn test -Dtest=ChargingStationMySQLIntegrationTest
 ```
 
-#### 选项B：单元测试（H2内存数据库）
+#### 选项B：单元测试（H2内存数据库，默认使用dev）
 ```bash
 # 运行单元测试
 ./scripts/dev.sh test
