@@ -433,6 +433,9 @@ export DB_PASSWORD=your-password
 
 ---
 
-**快速链接**:
+**azure快速链接**:
 - [Swagger API文档](https://charging-station-service-hrcbddgvh5bqc3de.eastasia-01.azurewebsites.net/charging-station/swagger-ui/index.html)
 - [Health Check](https://charging-station-service-hrcbddgvh5bqc3de.eastasia-01.azurewebsites.net/charging-station/actuator/health)
+**aws快速链接**
+- [Swagger API文档](https://vk3fu5ntkm.ap-southeast-2.awsapprunner.com/charging-station/swagger-ui/index.html)
+- [Health Check](https://vk3fu5ntkm.ap-southeast-2.awsapprunner.com/charging-station/actuator/health)
