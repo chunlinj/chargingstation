@@ -43,6 +43,7 @@ public class ConnectorService {
         connector.setEvse(evse);
         
         Connector savedConnector = connectorRepository.save(connector);
+        System.out.println("Connector created successfully");
         return connectorMapper.toResponse(savedConnector);
     }
     
