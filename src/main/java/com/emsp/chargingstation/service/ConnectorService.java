@@ -36,6 +36,7 @@ public class ConnectorService {
     public ConnectorResponse createConnector(UUID evseId, CreateConnectorRequest request) {
         // Check if EVSE exists
         Evse evse = findEvseById(evseId);
+        System.out.println("EVSE: " + evse);
         
         // Create connector
         Connector connector = connectorMapper.toEntity(request);
